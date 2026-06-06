@@ -1,2 +1,0 @@
-﻿# Other dependencies
-(해당 매니페스트 파일이 없음)

@@ -13,6 +13,7 @@ class Interpreter {
 public:
     Interpreter();
     void interpret(AST::Program& program);
+    void callFluxFunction(const std::string& name);
 
 private:
     std::shared_ptr<Environment> globals;

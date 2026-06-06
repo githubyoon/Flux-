@@ -15,6 +15,12 @@
 #include <windows.h>
 #pragma comment(lib, "user32.lib")
 
+namespace Flux { class Interpreter; }
+static Flux::Interpreter* g_activeInterpreter = nullptr;
+static std::map<int, std::string> g_buttonCallbacks;
+static int g_nextControlId = 1000;
+static HWND g_hWnd = NULL;
+
 static std::wstring utf8ToWide(const std::string& str) {
     if (str.empty()) return L"";
     int size_needed = MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
@@ -23,9 +29,15 @@ static std::wstring utf8ToWide(const std::string& str) {
     return wstrTo;
 }
 
-static HWND g_hWnd = NULL;
 static LRESULT CALLBACK FluxWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
+        case WM_COMMAND: {
+            int id = LOWORD(wp);
+            if (HIWORD(wp) == BN_CLICKED && g_buttonCallbacks.count(id) && g_activeInterpreter) {
+                g_activeInterpreter->callFluxFunction(g_buttonCallbacks[id]);
+            }
+            break;
+        }
         case WM_DESTROY: PostQuitMessage(0); return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
@@ -69,6 +81,7 @@ inline bool valuesEqual(const Runtime::Value& l, const Runtime::Value& r) {
 Interpreter::Interpreter() {
     globals = std::make_shared<Environment>();
     environment = globals;
+    g_activeInterpreter = this;
 }
 
 void Interpreter::interpret(AST::Program& program) {
@@ -272,17 +285,34 @@ Runtime::Value Interpreter::evaluate(AST::Expression& expr) {
                 }
             } else if (importedModules.count(objName)) {
                 if (objName == "gui") {
-                    #ifdef _WIN32
+#ifdef _WIN32
                     if (subName == "msgbox") {
-                        MessageBoxW(NULL, utf8ToWide(Runtime::valueToString(evaluate(*call->args[1]))).c_str(), utf8ToWide(Runtime::valueToString(evaluate(*call->args[0]))).c_str(), MB_OK | MB_ICONINFORMATION); return 0;
+                        MessageBoxW(g_hWnd, utf8ToWide(Runtime::valueToString(evaluate(*call->args[1]))).c_str(), utf8ToWide(Runtime::valueToString(evaluate(*call->args[0]))).c_str(), MB_OK | MB_ICONINFORMATION); return 0;
                     }
                     if (subName == "window") {
                         WNDCLASSW wc = {0}; wc.lpfnWndProc = FluxWndProc; wc.hInstance = GetModuleHandle(NULL); wc.lpszClassName = L"FluxWindowClass";
                         wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1); RegisterClassW(&wc);
                         g_hWnd = CreateWindowExW(0, wc.lpszClassName, utf8ToWide(Runtime::valueToString(evaluate(*call->args[0]))).c_str(), WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, std::get<int>(evaluate(*call->args[1])), std::get<int>(evaluate(*call->args[2])), NULL, NULL, wc.hInstance, NULL); return 0;
                     }
+                    if (subName == "button") {
+                        std::wstring text = utf8ToWide(Runtime::valueToString(evaluate(*call->args[0])));
+                        int x = std::get<int>(evaluate(*call->args[1])), y = std::get<int>(evaluate(*call->args[2]));
+                        int w = std::get<int>(evaluate(*call->args[3])), h = std::get<int>(evaluate(*call->args[4]));
+                        std::string callback = Runtime::valueToString(evaluate(*call->args[5]));
+                        int id = g_nextControlId++; g_buttonCallbacks[id] = callback;
+                        CreateWindowExW(0, L"BUTTON", text.c_str(), WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON, x, y, w, h, g_hWnd, (HMENU)id, GetModuleHandle(NULL), NULL); return 0;
+                    }
+                    if (subName == "label") {
+                        std::wstring text = utf8ToWide(Runtime::valueToString(evaluate(*call->args[0])));
+                        int x = std::get<int>(evaluate(*call->args[1])), y = std::get<int>(evaluate(*call->args[2]));
+                        int w = std::get<int>(evaluate(*call->args[3])), h = std::get<int>(evaluate(*call->args[4]));
+                        CreateWindowExW(0, L"STATIC", text.c_str(), WS_VISIBLE | WS_CHILD | SS_LEFT, x, y, w, h, g_hWnd, NULL, GetModuleHandle(NULL), NULL); return 0;
+                    }
                     if (subName == "loop") { MSG msg; while (GetMessageW(&msg, NULL, 0, 0)) { TranslateMessage(&msg); DispatchMessageW(&msg); } return 0; }
-                    #endif
+#endif
+                } else if (objName == "system") {
+                    if (subName == "shell") return std::system(Runtime::valueToString(evaluate(*call->args[0])).c_str());
+                    if (subName == "exit") std::exit(call->args.empty() ? 0 : std::get<int>(evaluate(*call->args[0])));
                 } else if (objName == "console" && subName == "color") {
                     std::string c = Runtime::valueToString(evaluate(*call->args[0]));
                     if (c == "red") std::cout << "\033[31m"; else if (c == "reset") std::cout << "\033[0m"; return 0;
@@ -304,6 +334,19 @@ Runtime::Value Interpreter::evaluate(AST::Expression& expr) {
 void Interpreter::print(const std::vector<Runtime::Value>& args) {
     for (const auto& a : args) std::cout << Runtime::valueToString(a);
     std::cout << std::endl;
+}
+
+void Interpreter::callFluxFunction(const std::string& name) {
+    if (functions.count(name)) {
+        auto* f = functions[name];
+        auto sub = std::make_shared<Environment>(globals);
+        auto prev = environment;
+        environment = sub;
+        try { for (auto& s : f->body) execute(*s); } 
+        catch (const std::exception& e) { std::cerr << "Callback Error: " << e.what() << std::endl; }
+        catch (...) { std::cerr << "Unknown Callback Error" << std::endl; }
+        environment = prev;
+    }
 }
 
 } // namespace Flux
