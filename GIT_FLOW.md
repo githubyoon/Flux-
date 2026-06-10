@@ -1,4 +1,8 @@
-﻿# Git Flow 정책 — flux+
+﻿> 💡 **빠른 실행이 필요하신가요?**
+> [`GIT_FLOW_CHEATSHEET.md`](GIT_FLOW_CHEATSHEET.md) 에서 상황별 명령어를 바로 확인하세요.
+
+---
+# Git Flow 정책 — flux+
 
 > 소규모 1인 개발에 최적화된 실용적인 Git Flow 정책
 
@@ -120,3 +124,4 @@ git push origin main --tags
 # 7. develop으로 돌아가서 계속 작업
 git checkout develop
 ```
+
