@@ -1,6 +1,10 @@
 #include "Compiler.h"
 #include "OpCode.h"
+#include "Lexer.h"
+#include "Parser.h"
 #include <stdexcept>
+#include <fstream>
+#include <sstream>
 
 namespace Flux {
 
@@ -24,6 +28,7 @@ void Compiler::compile(AST::Program& program, Runtime::Chunk* chunk) {
 
     emitByte(OP_RETURN);
 }
+
 
 void Compiler::emitByte(uint8_t byte) {
     currentChunk->write(byte, 0); 
@@ -78,11 +83,14 @@ void Compiler::compileStatement(AST::Statement& stmt) {
         for (auto& decl : varDecl->decls) {
             if (decl->initializer) {
                 compileExpression(*decl->initializer);
-            } else {
-                if (varDecl->type == "int") emitConstant(0);
-                else if (varDecl->type == "float") emitConstant(0.0f);
-                else if (varDecl->type == "bool") emitByte(OP_FALSE);
-                else emitConstant(std::string(""));
+            } else if (varDecl->type == "int") emitConstant(0);
+            else if (varDecl->type == "float") emitConstant(0.0f);
+            else if (varDecl->type == "bool") emitByte(OP_FALSE);
+            else if (varDecl->type == "string") emitConstant(std::string(""));
+            else {
+                int nameIdx = currentChunk->addConstant(varDecl->type);
+                emitByte(OP_NEW);
+                emitByte((uint8_t)nameIdx);
             }
 
             if (scopeDepth > 0) {
@@ -151,6 +159,43 @@ void Compiler::compileStatement(AST::Statement& stmt) {
         beginScope();
         for (auto& s : block->statements) compileStatement(*s);
         endScope();
+    } else if (auto* importStmt = dynamic_cast<AST::ImportStmt*>(&stmt)) {
+        std::string moduleName = importStmt->moduleName;
+        if (moduleName == "math" || moduleName == "gui" || moduleName == "system") return;
+        
+        std::string fileName = moduleName + ".fx";
+        if (loadedFiles.count(fileName)) return;
+        loadedFiles.insert(fileName);
+
+        std::ifstream file(fileName);
+        if (!file.is_open()) throw std::runtime_error("Could not open module file: " + fileName);
+        std::stringstream buffer; buffer << file.rdbuf();
+        std::string code = buffer.str();
+
+        Lexer lexer(code);
+        auto tokens = lexer.tokenize();
+        Parser parser(tokens);
+        auto program = parser.parse();
+
+        for (auto& s : program->statements) compileStatement(*s);
+
+    } else if (auto* importFrom = dynamic_cast<AST::ImportFromStmt*>(&stmt)) {
+        std::string fileName = importFrom->fileName;
+        if (loadedFiles.count(fileName)) return;
+        loadedFiles.insert(fileName);
+
+        std::ifstream file(fileName);
+        if (!file.is_open()) throw std::runtime_error("Could not open module file: " + fileName);
+        std::stringstream buffer; buffer << file.rdbuf();
+        std::string code = buffer.str();
+
+        Lexer lexer(code);
+        auto tokens = lexer.tokenize();
+        Parser parser(tokens);
+        auto program = parser.parse();
+
+        for (auto& s : program->statements) compileStatement(*s);
+
     } else if (auto* sd = dynamic_cast<AST::StructDef*>(&stmt)) {
         int nameIdx = currentChunk->addConstant(sd->name);
         int ptrIdx = currentChunk->addConstant((void*)sd);
@@ -215,6 +260,15 @@ void Compiler::compileExpression(AST::Expression& expr) {
         int index = currentChunk->addConstant(memAss->memberAccess->memberName);
         emitByte(OP_SET_PROPERTY);
         emitByte((uint8_t)index);
+    } else if (auto* unary = dynamic_cast<AST::UnaryExpr*>(&expr)) {
+        if (unary->op.type == TokenType::T_MINUS) {
+            emitConstant(0);
+            compileExpression(*unary->operand);
+            emitByte(OP_SUBTRACT);
+        } else if (unary->op.type == TokenType::T_BANG) {
+            compileExpression(*unary->operand);
+            emitByte(OP_NOT);
+        }
     } else if (auto* var = dynamic_cast<AST::VariableExpr*>(&expr)) {
         int local = resolveLocal(var->name);
         if (local != -1) {
@@ -263,6 +317,23 @@ void Compiler::compileExpression(AST::Expression& expr) {
             emitByte(OP_CALL);
             emitByte((uint8_t)call->args.size());
         }
+    } else if (auto* printfExpr = dynamic_cast<AST::PrintfExpr*>(&expr)) {
+        // Handle printf interpolation: "text {expr} text"
+        bool first = true;
+        for (const auto& p : printfExpr->parts) {
+            if (p.isExpression) {
+                compileExpression(*p.expr);
+            } else {
+                emitConstant(p.text);
+            }
+            if (!first) {
+                emitByte(OP_ADD);
+            }
+            first = false;
+        }
+        if (first) emitConstant(std::string("")); // Empty printf
+        emitByte(OP_PRINT);
+        emitByte(OP_NULL);
     }
 }
 

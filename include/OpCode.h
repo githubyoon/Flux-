@@ -41,6 +41,10 @@ enum OpCode : uint8_t {
     OP_GET_PROPERTY,  // 객체 속성 읽기
     OP_SET_PROPERTY,  // 객체 속성 설정
 
+    OP_NEW_MAP,       // Map 인스턴스 생성
+    OP_GET_MAP,       // Map 요소 읽기
+    OP_SET_MAP,       // Map 요소 설정
+
     OP_DEFINE_STRUCT, // 구조체 정의 등록
     OP_DEFINE_CLASS,  // 클래스 정의 등록
 };

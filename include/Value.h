@@ -12,10 +12,11 @@ namespace Runtime {
 
 struct Array;
 struct Object;
+struct Map;
 struct ObjFunction;
 class Chunk;
 
-using Value = std::variant<int, float, std::string, bool, std::shared_ptr<Array>, std::shared_ptr<Object>, std::shared_ptr<ObjFunction>, void*>;
+using Value = std::variant<int, float, std::string, bool, std::shared_ptr<Array>, std::shared_ptr<Object>, std::shared_ptr<Map>, std::shared_ptr<ObjFunction>, void*>;
 
 struct ObjFunction {
     std::string name;
@@ -32,6 +33,10 @@ struct Array {
 struct Object {
     std::string typeName;
     std::map<std::string, Value> members;
+};
+
+struct Map {
+    std::map<std::string, Value> elements;
 };
 
 inline std::string valueToString(const Value& val) {
@@ -56,6 +61,9 @@ inline std::string valueToString(const Value& val) {
     }
     if (std::holds_alternative<std::shared_ptr<Object>>(val)) {
         return "[object " + std::get<std::shared_ptr<Object>>(val)->typeName + "]";
+    }
+    if (std::holds_alternative<std::shared_ptr<Map>>(val)) {
+        return "[map]";
     }
     return "";
 }

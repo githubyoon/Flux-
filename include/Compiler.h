@@ -3,6 +3,8 @@
 
 #include "AST.h"
 #include "Chunk.h"
+#include <set>
+#include <string>
 
 namespace Flux {
 
@@ -21,6 +23,7 @@ private:
     std::vector<Local> locals;
     int scopeDepth;
     std::shared_ptr<Runtime::ObjFunction> currentFunction;
+    std::set<std::string> loadedFiles;
 
     void emitByte(uint8_t byte);
     void emitConstant(Runtime::Value value);

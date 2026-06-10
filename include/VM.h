@@ -53,6 +53,7 @@ private:
     Runtime::Value peek(int distance) { return *(stackTop - 1 - distance); }
 
     InterpretResult run();
+    void printStackTrace();
 };
 
 } // namespace Flux

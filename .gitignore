@@ -1,3 +1,9 @@
+# Build artifacts
+*.obj
+*.exe
+build/
+
+# IDE/Editor folders
 .vs/
 .antigravitycli/
 .vscode/

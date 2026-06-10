@@ -15,8 +15,8 @@
 #include <windows.h>
 #pragma comment(lib, "user32.lib")
 
-namespace Flux { class Interpreter; }
-static Flux::Interpreter* g_activeInterpreter = nullptr;
+namespace Flux { class VM; }
+static Flux::VM* g_activeVM = nullptr;
 static std::map<int, std::string> g_buttonCallbacks;
 static int g_nextControlId = 1000;
 static HWND g_hWnd = NULL;
@@ -33,8 +33,8 @@ static LRESULT CALLBACK FluxWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_COMMAND: {
             int id = LOWORD(wp);
-            if (HIWORD(wp) == BN_CLICKED && g_buttonCallbacks.count(id) && g_activeInterpreter) {
-                g_activeInterpreter->callFluxFunction(g_buttonCallbacks[id]);
+            if (HIWORD(wp) == BN_CLICKED && g_buttonCallbacks.count(id) && g_activeVM) {
+                g_activeVM->callFluxFunction(g_buttonCallbacks[id]);
             }
             break;
         }
@@ -81,7 +81,7 @@ inline bool valuesEqual(const Runtime::Value& l, const Runtime::Value& r) {
 Interpreter::Interpreter() {
     globals = std::make_shared<Environment>();
     environment = globals;
-    g_activeInterpreter = this;
+    g_activeVM = nullptr; // VM 아님
 }
 
 void Interpreter::interpret(AST::Program& program) {
@@ -116,16 +116,16 @@ void Interpreter::interpret(AST::Program& program) {
 
 void Interpreter::execute(AST::Statement& stmt) {
     if (auto* varDecl = dynamic_cast<AST::VarDeclaration*>(&stmt)) {
-        for (const auto& name : varDecl->names) {
+        for (auto& decl : varDecl->decls) {
             if (varDecl->isArray) {
                 auto arr = std::make_shared<Runtime::Array>();
-                arr->elementType = varDecl->type; environment->define(name, arr);
+                arr->elementType = varDecl->type; environment->define(decl->name, arr);
             } else {
-                if (varDecl->type == "int") environment->define(name, 0);
-                else if (varDecl->type == "float") environment->define(name, 0.0f);
-                else if (varDecl->type == "string") environment->define(name, std::string(""));
-                else if (varDecl->type == "bool") environment->define(name, false);
-                else environment->define(name, std::shared_ptr<Runtime::Object>(nullptr));
+                if (varDecl->type == "int") environment->define(decl->name, 0);
+                else if (varDecl->type == "float") environment->define(decl->name, 0.0f);
+                else if (varDecl->type == "string") environment->define(decl->name, std::string(""));
+                else if (varDecl->type == "bool") environment->define(decl->name, false);
+                else environment->define(decl->name, std::shared_ptr<Runtime::Object>(nullptr));
             }
         }
     } else if (auto* exprStmt = dynamic_cast<AST::ExpressionStmt*>(&stmt)) {
@@ -183,8 +183,6 @@ void Interpreter::execute(AST::Statement& stmt) {
             if (!matched && (c.value == nullptr || valuesEqual(discVal, evaluate(*c.value)))) matched = true;
             if (matched) { try { for (auto& s : c.body) execute(*s); } catch (const BreakException&) { break; } }
         }
-    } else if (auto* importStmt = dynamic_cast<AST::ImportStmt*>(&stmt)) {
-        importedModules.insert(importStmt->moduleName);
     }
 }
 
@@ -224,22 +222,15 @@ Runtime::Value Interpreter::evaluate(AST::Expression& expr) {
             }
         } else if (classes.count(newExpr->className)) {
             for (auto& p : classes[newExpr->className]->properties) {
-                for (const auto& n : p->names) {
-                    if (p->type == "int") obj->members[n] = 0; else if (p->type == "float") obj->members[n] = 0.0f;
-                    else if (p->type == "bool") obj->members[n] = false; else obj->members[n] = std::string("");
+                for (auto& decl : p->decls) {
+                     if (p->type == "int") obj->members[decl->name] = 0; else if (p->type == "float") obj->members[decl->name] = 0.0f;
+                     else if (p->type == "bool") obj->members[decl->name] = false; else obj->members[decl->name] = std::string("");
                 }
             }
         }
         return obj;
     }
     if (auto* binary = dynamic_cast<AST::BinaryExpr*>(&expr)) {
-        if (binary->op.type == TokenType::T_AND_AND || binary->op.type == TokenType::T_OR_OR) {
-            auto l = evaluate(*binary->left);
-            bool lb = (std::holds_alternative<bool>(l) && std::get<bool>(l)) || (std::holds_alternative<int>(l) && std::get<int>(l) != 0);
-            if (binary->op.type == TokenType::T_AND_AND) { if (!lb) return false; } else { if (lb) return true; }
-            auto r = evaluate(*binary->right);
-            return (std::holds_alternative<bool>(r) && std::get<bool>(r)) || (std::holds_alternative<int>(r) && std::get<int>(r) != 0);
-        }
         auto left = evaluate(*binary->left); auto right = evaluate(*binary->right);
         auto getD = [](const Runtime::Value& v) { return std::holds_alternative<int>(v) ? (double)std::get<int>(v) : (double)std::get<float>(v); };
         switch (binary->op.type) {
@@ -268,9 +259,11 @@ Runtime::Value Interpreter::evaluate(AST::Expression& expr) {
             size_t dotPos = call->callee.find('.');
             std::string objName = call->callee.substr(0, dotPos);
             std::string subName = call->callee.substr(dotPos + 1);
-            Runtime::Value objVal; bool isObj = false;
-            try { objVal = environment->get(objName); isObj = std::holds_alternative<std::shared_ptr<Runtime::Object>>(objVal); } catch(...) {}
-            if (isObj) {
+            Runtime::Value objVal;
+            try { objVal = environment->get(objName); } catch(...) {}
+            
+            // 1. 객체 메서드 호출
+            if (std::holds_alternative<std::shared_ptr<Runtime::Object>>(objVal)) {
                 auto obj = std::get<std::shared_ptr<Runtime::Object>>(objVal);
                 if (obj && classes.count(obj->typeName)) {
                     for (auto& m : classes[obj->typeName]->methods) {
@@ -283,43 +276,43 @@ Runtime::Value Interpreter::evaluate(AST::Expression& expr) {
                         }
                     }
                 }
-            } else if (importedModules.count(objName)) {
-                if (objName == "gui") {
+            } 
+            // 2. 내장 타입 메서드 호출 (새로운 방식)
+            // 2. 내장 타입 메서드 호출
+            else if (std::holds_alternative<std::string>(objVal)) {
+                std::string s = std::get<std::string>(objVal);
+                if (subName == "len") push((int)s.length());
+                else if (subName == "upper") { std::transform(s.begin(), s.end(), s.begin(), ::toupper); push(s); }
+                else if (subName == "lower") { std::transform(s.begin(), s.end(), s.begin(), ::tolower); push(s); }
+            } else if (std::holds_alternative<std::shared_ptr<Runtime::Array>>(objVal)) {
+                auto arr = std::get<std::shared_ptr<Runtime::Array>>(objVal);
+                if (subName == "len") push((int)arr->elements.size());
+                else if (subName == "append") { arr->elements.push_back(evaluate(*call->args[0])); push(0); }
+                else if (subName == "pop") { auto val = arr->elements.back(); arr->elements.pop_back(); push(val); }
+            } else if (std::holds_alternative<int>(objVal) || std::holds_alternative<float>(objVal)) {
+                double val = std::holds_alternative<int>(objVal) ? (double)std::get<int>(objVal) : (double)std::get<float>(objVal);
+                if (subName == "abs") push(std::abs(val));
+                else if (subName == "round") push((int)std::round(val));
+            }
+
 #ifdef _WIN32
-                    if (subName == "msgbox") {
-                        MessageBoxW(g_hWnd, utf8ToWide(Runtime::valueToString(evaluate(*call->args[1]))).c_str(), utf8ToWide(Runtime::valueToString(evaluate(*call->args[0]))).c_str(), MB_OK | MB_ICONINFORMATION); return 0;
-                    }
-                    if (subName == "window") {
-                        WNDCLASSW wc = {0}; wc.lpfnWndProc = FluxWndProc; wc.hInstance = GetModuleHandle(NULL); wc.lpszClassName = L"FluxWindowClass";
-                        wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1); RegisterClassW(&wc);
-                        g_hWnd = CreateWindowExW(0, wc.lpszClassName, utf8ToWide(Runtime::valueToString(evaluate(*call->args[0]))).c_str(), WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, std::get<int>(evaluate(*call->args[1])), std::get<int>(evaluate(*call->args[2])), NULL, NULL, wc.hInstance, NULL); return 0;
-                    }
-                    if (subName == "button") {
-                        std::wstring text = utf8ToWide(Runtime::valueToString(evaluate(*call->args[0])));
-                        int x = std::get<int>(evaluate(*call->args[1])), y = std::get<int>(evaluate(*call->args[2]));
-                        int w = std::get<int>(evaluate(*call->args[3])), h = std::get<int>(evaluate(*call->args[4]));
-                        std::string callback = Runtime::valueToString(evaluate(*call->args[5]));
-                        int id = g_nextControlId++; g_buttonCallbacks[id] = callback;
-                        CreateWindowExW(0, L"BUTTON", text.c_str(), WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON, x, y, w, h, g_hWnd, (HMENU)id, GetModuleHandle(NULL), NULL); return 0;
-                    }
-                    if (subName == "label") {
-                        std::wstring text = utf8ToWide(Runtime::valueToString(evaluate(*call->args[0])));
-                        int x = std::get<int>(evaluate(*call->args[1])), y = std::get<int>(evaluate(*call->args[2]));
-                        int w = std::get<int>(evaluate(*call->args[3])), h = std::get<int>(evaluate(*call->args[4]));
-                        CreateWindowExW(0, L"STATIC", text.c_str(), WS_VISIBLE | WS_CHILD | SS_LEFT, x, y, w, h, g_hWnd, NULL, GetModuleHandle(NULL), NULL); return 0;
-                    }
-                    if (subName == "loop") { MSG msg; while (GetMessageW(&msg, NULL, 0, 0)) { TranslateMessage(&msg); DispatchMessageW(&msg); } return 0; }
-#endif
-                } else if (objName == "system") {
-                    if (subName == "shell") return std::system(Runtime::valueToString(evaluate(*call->args[0])).c_str());
-                    if (subName == "exit") std::exit(call->args.empty() ? 0 : std::get<int>(evaluate(*call->args[0])));
-                } else if (objName == "console" && subName == "color") {
-                    std::string c = Runtime::valueToString(evaluate(*call->args[0]));
-                    if (c == "red") std::cout << "\033[31m"; else if (c == "reset") std::cout << "\033[0m"; return 0;
+            else if (objName == "gui") {
+                if (subName == "msgbox") {
+                    MessageBoxW(g_hWnd, utf8ToWide(Runtime::valueToString(evaluate(*call->args[1]))).c_str(), utf8ToWide(Runtime::valueToString(evaluate(*call->args[0]))).c_str(), MB_OK | MB_ICONINFORMATION); return 0;
                 }
             }
+#endif
         }
         if (call->callee == "print") { std::cout << Runtime::valueToString(evaluate(*call->args[0])) << std::endl; return 0; }
+        if (call->callee == "input") {
+            if (!call->args.empty()) std::cout << Runtime::valueToString(evaluate(*call->args[0]));
+            std::string s; std::getline(std::cin, s); return s;
+        }
+        if (call->callee == "int") {
+            auto v = evaluate(*call->args[0]);
+            if (std::holds_alternative<std::string>(v)) return std::stoi(std::get<std::string>(v));
+            return std::holds_alternative<float>(v) ? (int)std::get<float>(v) : std::get<int>(v);
+        }
         if (functions.count(call->callee)) {
             auto* f = functions[call->callee]; auto sub = std::make_shared<Environment>(globals);
             for (size_t i=0; i<call->args.size() && i<f->params.size(); ++i) sub->define(f->params[i].name, evaluate(*call->args[i]));
@@ -343,8 +336,7 @@ void Interpreter::callFluxFunction(const std::string& name) {
         auto prev = environment;
         environment = sub;
         try { for (auto& s : f->body) execute(*s); } 
-        catch (const std::exception& e) { std::cerr << "Callback Error: " << e.what() << std::endl; }
-        catch (...) { std::cerr << "Unknown Callback Error" << std::endl; }
+        catch (...) {}
         environment = prev;
     }
 }

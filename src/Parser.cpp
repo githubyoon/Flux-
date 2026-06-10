@@ -231,8 +231,13 @@ std::unique_ptr<AST::Statement> Parser::parseImportStmt() {
     std::string first = consume(TokenType::T_IDENTIFIER, "Expect module or function name.").value;
     if (check(TokenType::T_IDENTIFIER) && peek().value == "from") {
         advance(); // consume "from"
-        std::string fileName = consume(TokenType::T_IDENTIFIER, "Expect filename.").value;
-        if (match(TokenType::T_DOT)) fileName += "." + consume(TokenType::T_IDENTIFIER, "extension").value;
+        std::string fileName;
+        if (match(TokenType::T_STRING_LITERAL)) {
+            fileName = previous().value;
+        } else {
+            fileName = consume(TokenType::T_IDENTIFIER, "Expect filename.").value;
+            if (match(TokenType::T_DOT)) fileName += "." + consume(TokenType::T_IDENTIFIER, "extension").value;
+        }
         consume(TokenType::T_SEMICOLON, ";");
         return std::make_unique<AST::ImportFromStmt>(first, fileName);
     }

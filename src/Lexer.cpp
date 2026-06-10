@@ -5,6 +5,7 @@ namespace Flux {
 
 const std::map<std::string, TokenType> Lexer::keywords = {
     {"function", TokenType::T_FUNCTION},
+    {"func", TokenType::T_FUNCTION},
     {"int", TokenType::T_INT},
     {"float", TokenType::T_FLOAT},
     {"string", TokenType::T_STRING},
