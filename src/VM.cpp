@@ -196,7 +196,82 @@ InterpretResult VM::run() {
                                 else if (subName == "round") { pop(); pop(); push((int)std::round(v)); }
                                 else if (subName == "sin") { pop(); pop(); push((float)std::sin(v)); }
                                 else if (subName == "cos") { pop(); pop(); push((float)std::cos(v)); }
+                                else if (subName == "tan") { pop(); pop(); push((float)std::tan(v)); }
+                                else if (subName == "sqrt") { pop(); pop(); push((float)std::sqrt(v)); }
+                                else if (subName == "pow") { 
+                                    double base = std::holds_alternative<int>(peek(1)) ? (double)std::get<int>(peek(1)) : (double)std::get<float>(peek(1));
+                                    pop(); pop(); pop(); push((float)std::pow(base, v)); 
+                                }
+                                else if (subName == "log") { pop(); pop(); push((float)std::log(v)); }
+                                else if (subName == "pi") { pop(); push(3.14159265f); }
+                                else if (subName == "e") { pop(); push(2.71828182f); }
                                 else { pop(); pop(); push(0); }
+                                break;
+                            }
+
+                            if (objName == "console") {
+                                if (subName == "clear") {
+#ifdef _WIN32
+                                    system("cls");
+#else
+                                    system("clear");
+#endif
+                                } else if (subName == "title") {
+#ifdef _WIN32
+                                    SetConsoleTitleW(utf8ToWide(Runtime::valueToString(peek(0))).c_str());
+#endif
+                                } else if (subName == "color") {
+#ifdef _WIN32
+                                    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), (WORD)std::get<int>(peek(0)));
+#endif
+                                }
+                                pop(); pop(); push(0); break;
+                            }
+
+                            if (objName == "file") {
+                                std::string path = Runtime::valueToString(peek(0));
+                                if (subName == "read") {
+                                    std::ifstream f(path);
+                                    if (f) {
+                                        std::stringstream b; b << f.rdbuf();
+                                        pop(); pop(); push(b.str());
+                                    } else { pop(); pop(); push(std::string("")); }
+                                } else if (subName == "write") {
+                                    std::string content = Runtime::valueToString(peek(1));
+                                    std::ofstream f(path);
+                                    if (f) f << content;
+                                    pop(); pop(); pop(); push(0);
+                                } else if (subName == "exists") {
+                                    pop(); pop(); push(std::filesystem::exists(path));
+                                } else if (subName == "remove") {
+                                    std::filesystem::remove(path);
+                                    pop(); pop(); push(0);
+                                } else { pop(); pop(); push(0); }
+                                break;
+                            }
+
+                            if (objName == "time") {
+                                if (subName == "sleep") {
+                                    int ms = std::get<int>(peek(0));
+                                    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+                                } else if (subName == "now") {
+                                    auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+                                    char buf[26]; ctime_s(buf, sizeof(buf), &now);
+                                    std::string s(buf); if (!s.empty()) s.pop_back();
+                                    pop(); push(s); break;
+                                }
+                                pop(); pop(); push(0); break;
+                            }
+
+                            if (objName == "random") {
+                                if (subName == "range") {
+                                    int max = std::get<int>(peek(0));
+                                    int min = std::get<int>(peek(1));
+                                    pop(); pop(); pop(); push(min + (std::rand() % (max - min + 1)));
+                                } else if (subName == "seed") {
+                                    std::srand((unsigned int)std::get<int>(peek(0)));
+                                    pop(); pop(); push(0);
+                                } else { pop(); pop(); push(0); }
                                 break;
                             }
                             
