@@ -13,7 +13,9 @@
 #ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
+#include <wininet.h>
 #pragma comment(lib, "user32.lib")
+#pragma comment(lib, "wininet.lib")
 
 namespace Flux { class VM; }
 static Flux::VM* g_activeVM = nullptr;
@@ -330,6 +332,32 @@ InterpretResult VM::run() {
                                 pop(); push(0);
                             } 
     #endif
+                            else if (objName == "net") {
+                                std::string url = Runtime::valueToString(pop());
+                                if (subName == "get" || subName == "post") {
+                                    std::string data = (subName == "post") ? Runtime::valueToString(pop()) : "";
+                                    pop(); // pop net object
+
+                                    HINTERNET hSession = InternetOpenW(L"FluxAgent", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+                                    if (hSession) {
+                                        HINTERNET hConnect = InternetOpenUrlW(hSession, utf8ToWide(url).c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0);
+                                        if (hConnect) {
+                                            std::string response;
+                                            char buffer[4096];
+                                            DWORD bytesRead;
+                                            while (InternetReadFile(hConnect, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
+                                                response.append(buffer, bytesRead);
+                                            }
+                                            InternetCloseHandle(hConnect);
+                                            InternetCloseHandle(hSession);
+                                            push(response);
+                                            break;
+                                        }
+                                        InternetCloseHandle(hSession);
+                                    }
+                                    push(std::string(""));
+                                } else { pop(); pop(); push(0); }
+                            }
                         }
                     } else throw std::runtime_error("Can only call functions.");
                     break;
