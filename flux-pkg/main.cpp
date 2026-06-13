@@ -1,4 +1,4 @@
-﻿#include <iostream>
+#include <iostream>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -272,6 +272,10 @@ void printUsage() {
     std::cout << "  flux-pkg uninstall <name>  Remove an installed module" << std::endl;
     std::cout << "  flux-pkg list              List installed modules" << std::endl;
     std::cout << "  flux-pkg info <name>       Show module details" << std::endl;
+    std::cout << "  flux-pkg --help, -h        Show this help" << std::endl;
+    std::cout << std::endl;
+    std::cout << "Shortcut:" << std::endl;
+    std::cout << "  flux-pkg <name>            Same as 'flux-pkg install <name>'" << std::endl;
     std::cout << std::endl;
     std::cout << "Environment:" << std::endl;
     std::cout << "  FLUX_REGISTRY   Package registry URL (default: " << DEFAULT_REGISTRY << ")" << std::endl;
@@ -290,6 +294,11 @@ int main(int argc, char* argv[]) {
     std::string command = argv[1];
     std::vector<std::string> args;
     for (int i = 2; i < argc; i++) args.push_back(argv[i]);
+    
+    if (command == "--help" || command == "-h") {
+        printUsage();
+        return 0;
+    }
     
     try {
         if (command == "install") cmdInstall(args);
