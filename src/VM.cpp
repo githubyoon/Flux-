@@ -4,23 +4,11 @@
 #include <iostream>
 #include <stdexcept>
 #include <algorithm>
-#include "ModuleMath.h"
-#include "ModuleConsole.h"
-#include "ModuleFile.h"
-#include "ModuleTime.h"
-#include "ModuleSystem.h"
-#include "ModuleGui.h"
-#include "ModuleNet.h"
-#include "ModuleJson.h"
-#include "ModuleUtil.h"
 
 namespace Flux {
 
 VM::VM() : frameCount(0), stackTop(stack), globals(std::make_shared<std::map<std::string, Runtime::Value>>()),
-           globalsMutex(std::make_shared<std::mutex>()) {
-#ifdef _WIN32
-    Flux::Modules::guiSetActiveVM(this);
-#endif
+            globalsMutex(std::make_shared<std::mutex>()) {
 }
 
 InterpretResult VM::interpret(Runtime::Chunk* chunk) {
@@ -231,19 +219,6 @@ InterpretResult VM::run() {
                         if (fullName == "print") {
                              std::cout << Runtime::valueToString(peek(0)) << std::endl;
                              pop(); pop(); push(0);
-                        } else if (fullName.find('.') != std::string::npos) {
-                            size_t dot = fullName.find('.');
-                            std::string objName = fullName.substr(0, dot);
-                            std::string subName = fullName.substr(dot+1);
-                            
-                            if (objName == "math")    { Flux::Modules::handleMath(subName, *this); }
-                            else if (objName == "console") { Flux::Modules::handleConsole(subName, *this); }
-                            else if (objName == "file")    { Flux::Modules::handleFile(subName, *this); }
-                            else if (objName == "time")    { Flux::Modules::handleTime(subName, *this); }
-                            else if (objName == "system")  { Flux::Modules::handleSystem(subName, *this); }
-                            else if (objName == "gui")     { Flux::Modules::handleGui(subName, *this); }
-                            else if (objName == "net")     { Flux::Modules::handleNet(subName, *this); }
-                            else if (objName == "json")    { Flux::Modules::handleJson(subName, *this); }
                         }
                     } else throw std::runtime_error("Can only call functions.");
                     break;
