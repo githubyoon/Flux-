@@ -4,7 +4,7 @@
 
 ## 🚀 주요 특징
 
-- **정적 타입 지향**: `int`, `float`, `string`, `bool` 타입을 명시하여 안정적인 코딩이 가능합니다.
+- **타입 명시**: `int`, `float`, `string`, `bool`, `map` 타입을 명시하여 Zero Value 자동 초기화를 지원합니다. 타입 검사는 런타임에 수행됩니다.
 - **Zero Value 정책**: 선언 후 초기화하지 않은 변수는 타입별 기본값(`0`, `false`, `""`)으로 자동 초기화됩니다.
 - **객체 지향 프로그래밍 (OOP)**: `struct`와 `class`를 지원하며, `this` 키워드를 통한 메서드 컨텍스트 제어가 가능합니다.
 - **견고한 예외 처리**: `try-catch-throw` 구문을 통해 런타임 오류를 우아하게 관리합니다.
@@ -24,16 +24,42 @@ function main() {
 }
 ```
 
+### 1-1. 맵(Map) 타입
+```flux
+map config = json.parse("{\"key\": \"value\"}");
+print(json.stringify(config));
+```
+
 ### 2. 조건문 및 반복문
+
+#### 2-1. if / else if / else
 ```flux
 if (score >= 90) {
     print("Grade: A");
 } else if (score >= 80) {
     print("Grade: B");
 }
+```
 
+> 조건식에서 `and`, `or`, `not`을 `&&`, `||`, `!` 대신 사용할 수 있습니다:
+> ```flux
+> if (x > 0 and x < 10) { }
+> if (not done) { }
+> ```
+
+#### 2-2. for 반복문
+```flux
 for (int i = 0; i < 5; i++) {
     printf("현재 카운트: {i}");
+}
+```
+
+> *(참고: `for` 반복문은 현재 트리-워크 인터프리터에서만 동작합니다. 바이트코드 VM에서는 `while`을 대신 사용하세요.)*
+
+#### 2-3. while 반복문
+```flux
+while (condition) {
+    print("Looping...");
 }
 ```
 
@@ -57,18 +83,47 @@ try {
 }
 ```
 
+### 5. 스레드 생성 (spawn)
+```flux
+function worker(int id) {
+    printf("Worker {id} started");
+}
+
+spawn(worker, 1);
+spawn(worker, 2);
+```
+`spawn`은 새로운 OS 스레드에서 함수를 실행합니다. 모든 스레드는 전역 변수를 공유합니다.
+
+### 6. 배열 메서드
+```flux
+int[] arr = [1, 2, 3, 4, 5];
+
+var doubled = arr.map(function(x) { return x * 2; });     // [2, 4, 6, 8, 10]
+var even = arr.filter(function(x) { return x > 2; });      // [3, 4, 5]
+var sum = arr.reduce(0, function(acc, x) { return acc + x; }); // 15
+arr.sort();                                                  // 정렬
+int len = arr.len();                                         // 5
+arr.append(6);                                               // [1,2,3,4,5,6]
+```
+
+### 7. 모듈 임포트
+```flux
+import "math";                 // 표준 모듈 임포트
+import greet from "lib.fx";   // 외부 파일에서 함수 임포트
+```
+
 ## 📦 표준 모듈 목록
 
-| 모듈 | 주요 기능 |
+| 모듈 | 함수 목록 (총 10개) |
 | :--- | :--- |
-| **`gui`** | 메시지 박스 팝업, 윈도우 창 생성, **버튼 컨트롤 추가**, 이벤트 루프 |
-| **`net`** | **HTTP GET/POST 요청**, 웹 데이터 수집 |
-| **`system`** | **OS 쉘 실행**, 플랫폼 확인, 환경 변수 읽기, 종료 |
-| **`console`** | **사용자 입력(input)**, 화면 초기화, 텍스트 색상 변경, 커서 조작, 창 제목 설정 |
-| **`file`** | 파일 읽기/쓰기/추가(append), **디렉토리 생성**, 존재 확인, 크기 및 타입 확인 |
-| **`math`** | sqrt, pow, abs, sin, cos, tan, log, pi, e |
-| **`time`** | **정밀 틱(ticks) 측정**, 밀리초/초 단위 지연, 현재 시간 포맷팅 |
-| **`random`** | 난수 생성, 시드 설정 |
+| **`gui`** | `msgbox`, `window`, `button`, `loop`, `label`, `close`, `setTitle`, `getX`, `getY`, `show` |
+| **`net`** | `get`, `post`, `put`, `del`, `encode`, `decode`, `download`, `status`, `headers`, `ip` |
+| **`system`** | `exit`, `run`, `os`, `env`, `cpu`, `pid`, `user`, `cwd`, `temp`, `host` |
+| **`console`** | `clear`, `title`, `color`, `input`, `width`, `height`, `cursor`, `readkey`, `beep`, `reset` |
+| **`file`** | `read`, `write`, `append`, `exists`, `remove`, `size`, `is_dir`, `mkdir`, `copy`, `rename` |
+| **`math`** | `abs`, `round`, `sin`, `cos`, `tan`, `sqrt`, `pow`, `log`, `pi`, `e` |
+| **`time`** | `sleep`, `now`, `ticks`, `year`, `month`, `date`, `hour`, `minute`, `second`, `format` |
+| **`json`** | `parse`, `stringify`, `isValid`, `format`, `minify`, `keys`, `values`, `has`, `merge`, `type` |
 
 ## 🏗️ 빌드 방법 (Windows MSVC 기준)
 

@@ -40,6 +40,10 @@ public:
     void callFluxFunction(const std::string& name);
     Runtime::Value callValue(Runtime::Value callee, const std::vector<Runtime::Value>& args);
 
+    void push(Runtime::Value value) { *stackTop = value; stackTop++; }
+    Runtime::Value pop() { stackTop--; return *stackTop; }
+    Runtime::Value peek(int distance) { return *(stackTop - 1 - distance); }
+
 private:
     static const int FRAMES_MAX = 64;
     static const int STACK_MAX = 256;
@@ -59,10 +63,6 @@ private:
 
     uint8_t readByte() { return *frames[frameCount - 1].ip++; }
     Runtime::Value readConstant() { return frames[frameCount - 1].chunk->constants[readByte()]; }
-
-    void push(Runtime::Value value) { *stackTop = value; stackTop++; }
-    Runtime::Value pop() { stackTop--; return *stackTop; }
-    Runtime::Value peek(int distance) { return *(stackTop - 1 - distance); }
 
     InterpretResult run();
     void printStackTrace();

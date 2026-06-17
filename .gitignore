@@ -8,8 +8,6 @@ build/
 .antigravitycli/
 .vscode/
 
-# Test files (moved to tests/ directory)
-tests/
 
 # Work tracking documents (local only)
 WORK_CONTINUATION.md
