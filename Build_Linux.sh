@@ -1,29 +1,18 @@
-#!/bin/bash
+#!/bin/sh
 
-# Compiler setup
-CXX=g++
+# Build Flux interpreter
+g++ -std=c++20 -Iinclude \
+    src/main.cpp \
+    src/Lexer.cpp \
+    src/Parser.cpp \
+    src/Compiler.cpp \
+    src/VM.cpp \
+    -o flux
 
-# Compiler flags (C++20 standard and UTF-8 encoding)
-CXXFLAGS="-std=c++20 -finput-charset=utf-8 -fexec-charset=utf-8"
+# Build Flux package manager
+g++ -std=c++20 -Iinclude \
+    flux-pkg/main.cpp \
+    -o flux-pkg
 
-# Include directory path
-INCLUDES="-Iinclude"
-
-# List of source files
-SRCS="src/main.cpp src/Lexer.cpp src/Parser.cpp src/Interpreter.cpp"
-
-# Output executable name
-TARGET="flux_interpreter"
-
-echo "Starting compilation..."
-
-# Run the g++ command
-$CXX $CXXFLAGS $SRCS $INCLUDES -o $TARGET
-
-# Check if the build was successful
-if [ $? -eq 0 ]; then
-    echo "Build Successful! -> $TARGET"
-else
-    echo "Build Failed..."
-    exit 1
-fi
+echo
+echo "Done. flux and flux-pkg built."
